@@ -1,0 +1,57 @@
+=====================
+Tumblr Dashboard Feed
+=====================
+  Author: Trevor Bekolay tbekolay@gmail.com
+  Version: 0.1
+  License: BSD 2-Clause License
+    (see http://www.opensource.org/licenses/bsd-license.php and LICENSE)
+
+This script grabs the most recent 50 items in your Tumblr dashboard
+and then creates an Atom feed that you can subscribe to in a feed reader.
+
+Requirements
+------------
+
+This script is designed for Python 2.6, but it may run on earlier and
+later versions. If there are incompatiblities, please let me know at
+tbekolay@gmail.com.
+
+The following libraries are required:
+ - ElementTree, should be included in Python, but locations change
+ - feedformatter, which can be downloaded from
+   http://code.google.com/p/feedformatter/ or easy_installed
+   (easy_install feedformatter)
+
+Usage
+-----
+
+To use the script, copy sample.config.ini to config.ini and fill in the
+appropriate values. You can then run the script with
+  python tumblr-dashboard-feed.py
+which will output tumblr.xml (the raw data from Tumblr)
+and atom.xml (an Atom feed that you can subscribe to).
+
+Note that you will have to run this manually, and make atom.xml
+accessible from the web if you subscribe in a feed reader like Google Reader.
+
+I do this (and recommend you do this) by:
+ - creating a cron task that runs the script once per minute
+   (please not any more often, for the sake of Tumblr)
+ - making a symbolic link to atom.xml in a directory that your web server
+   knows about (for me, that's /var/www)
+
+Credits
+-------
+
+Some of the initial ideas for the script came from PJ Kix's similar php script,
+which can be found at https://github.com/pjkix/tumblr-dashboard-rss.
+
+The script relies on the libraries listed above, so thanks to their respective
+authors for creating them and making them freely available.
+
+Changelog
+---------
+
+v0.1 (2011-09-13): Initial release. Feature complete, I think, but there are
+  bound to be bugs.
+
