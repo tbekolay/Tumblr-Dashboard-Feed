@@ -1,0 +1,4 @@
+cron:
+- description: poll Tumblr for new dashboard entries
+  url: /update
+  schedule: every 5 minutes

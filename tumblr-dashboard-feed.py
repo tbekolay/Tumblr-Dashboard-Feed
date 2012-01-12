@@ -1,10 +1,17 @@
-import os
+import cgi
 import time
-import logging
-import httplib, urllib
+import httplib
+import urllib
+import wsgiref.handlers
+
+from google.appengine.ext import db
+from google.appengine.api import users
+from google.appengine.ext import webapp
+from google.appengine.ext.webapp.util import run_wsgi_app
+
 from StringIO import StringIO
 from ConfigParser import RawConfigParser
-from feedformatter import Feed
+from feedformatter.feedformatter import Feed
 try:
   from xml.etree.cElementTree import XML
 except ImportError:
@@ -14,7 +21,6 @@ except ImportError:
 # Setup (config, logging) #
 ###########################
 _defaults = {
-  'LOGGING': False,
   'tumblr': {
              'email': 'example@example.com',
              'password': 'example',
@@ -28,14 +34,6 @@ _defaults = {
 
 _config = RawConfigParser(_defaults)
 _config.read('config.ini')
-_log_kw = {'filename': 'tumblr-dashboard-feed.log',
-           'format':'[%(asctime)s %(levelname)s] %(message)s',
-           'datefmt':'%Y-%m-%d %H-%M-%S'}
-
-if _config.get('DEFAULT','LOGGING'):
-  logging.basicConfig(level=logging.DEBUG,**_log_kw)
-else:
-  logging.basicConfig(level=logging.CRITICAL,**_log_kw)
 
 #############
 # Functions #
@@ -46,8 +44,6 @@ def fetch_tumblr_dashboard_xml(email,password):
   :param string email: Tumblr account email address
   :param string password: tumblr account password
   """
-  
-  logging.debug('Requesting API read')
   
   # Prepare POST request
   params = urllib.urlencode([('email',email),('password',password),
@@ -62,10 +58,9 @@ def fetch_tumblr_dashboard_xml(email,password):
   connection.close()
   
   if str(response.status) == '200':
-    return response.read()
+    return (True, response.read())
   else:
-    logging.error('Connection failed. Response %s, %s' % (response.status, response.reason))
-    return None
+    return (False,'Connection failed. Response %s, %s' % (response.status, response.reason))
 
 def xml_to_atom(xml,feedtitle,feeddescription,feedurl,authoremail,img_size=0):
   """Transform the XML from Tumblr into an Atom feed.
@@ -272,30 +267,55 @@ def xml_to_atom(xml,feedtitle,feeddescription,feedurl,authoremail,img_size=0):
   
   return atom.format_atom_string(pretty=True)
 
-########################
-# Non-import behaviour #
-########################
+class TumblrDashboard(db.Model):
+  """Models a TumblrDashboard entry with email identifier, raw XML, and Atom feed."""
+  # key = email
+  xml = db.TextProperty()
+  atom = db.TextProperty()
+
+class MainPage(webapp.RequestHandler):
+  def get(self):
+    self.response.out.write("<html><body>Under construction</body></html>")
+
+class UpdateDB(webapp.RequestHandler):
+  def get(self):
+    """To be run occasionally (via cron)"""
+    email_s = _config.get('tumblr','email')
+    xml = fetch_tumblr_dashboard_xml(email_s,_config.get('tumblr','password'))
+  
+    if not xml[0]:
+      # If we can't fetch for some reason, let's bail
+      self.response.out.write(xml[1])
+      return
+  
+    atom = xml_to_atom(xml[1],_config.get('feed','title'),
+                             _config.get('feed','description'),
+                             _config.get('feed','url'),
+                             email_s,
+                             int(_config.get('feed','img_size')))
+
+    dash = TumblrDashboard.get_or_insert(email_s)
+    dash.xml = db.Text(''.join(xml[1]), encoding="utf-8")
+    dash.atom = db.Text(atom, encoding="utf-8")
+    dash.put()
+    self.response.out.write("Successfully updated")
+
+class Tumblr(webapp.RequestHandler):
+  def get(self):
+    self.response.headers['Content-Type'] = 'application/atom+xml'
+    email_s = _config.get('tumblr','email')
+
+    dash = TumblrDashboard.get_or_insert(email_s)
+    self.response.out.write(dash.atom)
+
+application = webapp.WSGIApplication([
+  ('/', MainPage),
+  ('/update', UpdateDB),
+  ('/atom.xml', Tumblr)
+], debug=True)
+
+def main():
+  run_wsgi_app(application)
+
 if __name__ == '__main__':
-  xml_path = 'tumblr.xml'
-  atom_path = 'atom.xml'
-  
-  xml = fetch_tumblr_dashboard_xml(_config.get('tumblr','email'),_config.get('tumblr','password'))
-  
-  if xml is None:
-    # Fallback to reading an old tumblr.xml
-    with open(xml_path,'r') as f:
-      xml = ''.join(f.readlines())
-  else:
-    # Write raw data to tumblr.xml just in case
-    with open(xml_path,'w') as f:
-      f.writelines(xml)
-
-  atom = xml_to_atom(xml,_config.get('feed','title'),
-                         _config.get('feed','description'),
-                         _config.get('feed','url'),
-                         _config.get('tumblr','email'),
-                         int(_config.get('feed','img_size')))
-  
-  with open(atom_path,'w') as f:
-    f.writelines(atom)
-
+  main()

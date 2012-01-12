@@ -1,0 +1,11 @@
+application: tbekolay
+version: 2
+runtime: python
+api_version: 1
+
+handlers:
+- url: /.*
+  script: tumblr-dashboard-feed.py
+- url: /update
+  script: tumblr-dashboard-feed.py
+  login: admin
